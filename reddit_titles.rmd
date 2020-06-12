@@ -1,0 +1,133 @@
+```{r}
+if (!require("udpipe")) install.packages("udpipe")
+library(udpipe)
+if (!require("SnowballC")) install.packages("SnowballC"); require(SnowballC) #for text Stemmign
+if (!require("hunspell")) install.packages("hunspell"); require(hunspell) # for spell check and spelling
+if (!require("ggplot2")) install.packages("ggplot2"); require(ggplot2) 
+if (!require("igraph")) install.packages("igraph"); require(igraph) 
+if (!require("ggraph")) install.packages("ggraph"); require(ggraph) 
+if (!require("widyr")) install.packages("widyr"); require(widyr) 
+if (!require("dplyr")) install.packages("dplyr"); require(dplyr) 
+if (!require("tm")) install.packages("tm"); require(tm) 
+if (!require("psych")) install.packages("psych"); require(psych) 
+if (!require("lubridate")) install.packages("lubridate"); require(lubridate) 
+if (!require("magrittr")) install.packages("magrittr"); require(magrittr) 
+
+```
+```{r}
+data=read.csv("Reddit.csv", encoding = "UTF-8")
+head(data)
+```
+```{r}
+df.SD.yes = data[data$label.sd.sr. == "yy" | data$label.sd.sr. == "yn", ]
+```
+
+```{r}
+tweet.yes <- Corpus(VectorSource(df.SD.yes$title)) 
+#tweet.yes
+```
+
+```{r}
+## Here is the R code to build the content transformer, which we will call toSpace:
+#create the toSpace content transformer
+toSpace <- content_transformer(function(x, pattern) {return (gsub(pattern, " ", x))})
+
+
+tweet.yes <- tm_map(tweet.yes, toSpace, "-")
+tweet.yes <- tm_map(tweet.yes, toSpace, ":")
+
+#Remove punctuation – replace punctuation marks with ” “
+tweet.yes <- tm_map(tweet.yes, removePunctuation)
+
+#Transform to lower case (need to wrap in content_transformer)
+tweet.yes <- tm_map(tweet.yes,content_transformer(tolower))
+
+#Strip digits (std transformation, so no need for content_transformer)
+tweet.yes <- tm_map(tweet.yes, removeNumbers)
+
+#remove stopwords using the standard list in tm
+tweet.yes <- tm_map(tweet.yes, removeWords, stopwords("english"))
+
+#Strip whitespace (cosmetic?)
+tweet.yes <- tm_map(tweet.yes, stripWhitespace)
+
+library(SnowballC)
+#Stem document
+tweet.yes <- tm_map(tweet.yes,stemDocument)
+```
+```{r}
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "gotten", replacement = "got")
+
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "gotta", replacement = "got")
+
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "felt", replacement = "feel")
+
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "<f0><ff><U+0098><U+00AD>", replacement = "heartemoji")
+
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "“", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "ð", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "ÿ", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "â", replacement = "")
+
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "€", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "˜•", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "¦", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "™", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "–", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "´", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "«", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "™", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "™", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "™", replacement = "")
+tweet.yes <- tm_map(tweet.yes, content_transformer(gsub), pattern = "’", replacement = "")
+
+
+
+#defining context-sensitive stopwords
+Stopwords <- c("take", "get", "now", "ive", "use", "one", "also", "will", "can", "put", "https", "have", "'ve", "ve", " ’ ", "\U0001f60a", "â€™", "â€", 'NOW_NEW:', "’m", 'need', 'just', 'tri', 'actual', 'know', 'bodi', 'like', 'thing', 'back', "’ll", 'find', 'realli', 'make', 'black', "’s", 'someth', 'think')
+tweet.yes <- tm_map(tweet.yes, removeWords, Stopwords)
+
+dtm.yesr <-DocumentTermMatrix(tweet.yes, control=list(wordLengths=c(3, 20),bounds = list(global = c(3,30))))
+```
+```{r}
+
+dtm.yes <- DocumentTermMatrix(tweet.yes)
+#inspect(dtm.yes[1:2,900:910])
+
+freq <- colSums(as.matrix(dtm.yes))
+
+#create sort order (descending)
+dec_ord.yes <- order(freq,decreasing=TRUE)
+
+#inspect most frequently occurring terms
+freq[head(dec_ord.yes)]
+
+#inspect least frequently occurring terms
+freq[tail(dec_ord.yes)] 
+
+write.csv(freq[dec_ord.yes],"freq_sleepdisorder_yes.csv")
+```
+```{r}
+freqTerms.yes = findFreqTerms(dtm.yes,lowfreq=20)
+```
+
+```{r}
+wf.yes=data.frame(term=names(freq), occurrences=freq, sleepdisorder = "yes")
+head(wf.yes)
+```
+
+```{r}
+wf.yes %>% 
+  filter(occurrences > 5) %>%
+  arrange(desc(occurrences)) %>%
+  
+  ggplot(aes(reorder(wf.yes$term, wf.yes$occurences), occurrences)) +
+    geom_col(show.legend = FALSE, fill = 'teal') +
+    labs(y = "Occurences of words in Reddit Titles",
+         x = NULL) +
+    coord_flip()
+
+ggsave("reddit_titles.jpeg")
+```
+
+
